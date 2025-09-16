@@ -1,0 +1,25 @@
+# Django ve Web Altyapısı
+django==4.2.7
+djangorestframework==3.14.0
+daphne==4.0.0
+gunicorn==21.2.0
+
+# Asenkron ve Sohbet
+channels==4.0.0
+channels-redis==4.1.0
+
+# Arka Plan Görevleri
+celery==5.3.4
+redis==5.0.1
+
+# Ayarlar ve Veritabanı
+python-decouple==3.8
+dj-database-url==2.1.0
+
+# Yardımcı Kütüphaneler
+Pillow==10.1.0
+requests==2.31.0
+django-cors-headers==4.3.1
+
+# Google Servisleri
+firebase-admin==6.3.0
