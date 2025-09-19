@@ -1,50 +1,93 @@
-# interactions/logic.py
+# Lütfen bu kodu kopyalayıp interactions/logic.py dosyasının içine yapıştırın.
 
-ELEMENT_MAP = {
-    'Aries': 'Fire', 'Leo': 'Fire', 'Sagittarius': 'Fire',
-    'Taurus': 'Earth', 'Virgo': 'Earth', 'Capricorn': 'Earth',
-    'Gemini': 'Air', 'Libra': 'Air', 'Aquarius': 'Air',
-    'Cancer': 'Water', 'Scorpio': 'Water', 'Pisces': 'Water',
-}
-MODALITY_MAP = {
-    'Aries': 'Cardinal', 'Cancer': 'Cardinal', 'Libra': 'Cardinal', 'Capricorn': 'Cardinal',
-    'Taurus': 'Fixed', 'Leo': 'Fixed', 'Scorpio': 'Fixed', 'Aquarius': 'Fixed',
-    'Gemini': 'Mutable', 'Virgo': 'Mutable', 'Sagittarius': 'Mutable', 'Pisces': 'Mutable',
-}
-ELEMENT_SCORES = {
-    ('Air', 'Fire'): 95, ('Earth', 'Water'): 90, ('Fire', 'Fire'): 85, ('Earth', 'Earth'): 85,
-    ('Water', 'Water'): 85, ('Air', 'Air'): 80, ('Earth', 'Fire'): 40, ('Air', 'Water'): 60,
-    ('Fire', 'Water'): 30, ('Air', 'Earth'): 35,
-}
-MODALITY_SCORES = {
-    ('Cardinal', 'Cardinal'): 70, ('Fixed', 'Fixed'): 60, ('Mutable', 'Mutable'): 80,
-    ('Cardinal', 'Fixed'): 75, ('Fixed', 'Mutable'): 75, ('Cardinal', 'Mutable'): 75,
-}
+def calculate_synastry_score(aspects_data: list) -> (int, dict):
+    """
+    Sinastri API'sinden gelen açı verilerini analiz ederek bir genel uyum skoru
+    ve anlamlı alt skor dökümü (breakdown) oluşturur.
 
-def _get_element_score(sign1, sign2):
-    if not all([sign1, sign2]): return 30
-    element1, element2 = ELEMENT_MAP.get(sign1), ELEMENT_MAP.get(sign2)
-    if not all([element1, element2]): return 30
-    return ELEMENT_SCORES.get(tuple(sorted((element1, element2))), 50)
+    Args:
+        aspects_data: /v1/synastry/aspects endpoint'inden dönen JSON listesi.
 
-def _get_modality_score(sign1, sign2):
-    if not all([sign1, sign2]): return 30
-    modality1, modality2 = MODALITY_MAP.get(sign1), MODALITY_MAP.get(sign2)
-    if not all([modality1, modality2]): return 30
-    return MODALITY_SCORES.get(tuple(sorted((modality1, modality2))), 50)
+    Returns:
+        Bir tuple döner: (genel_skor, breakdown_dict)
+    """
+    if not aspects_data:
+        return 0, {}
 
-def calculate_compatibility_score(profile1, profile2) -> int:
-    p1 = profile1
-    p2 = profile2
-    if not all([p1.sun_sign, p1.moon_sign, p1.rising_sign, p2.sun_sign, p2.moon_sign, p2.rising_sign]):
-        return 0
+    # Her açının önemine göre ağırlıklar ve puanlar tanımlayalım
+    # Bu değerler, istenen sonuca göre ayarlanabilir (tuning).
+    ASPECT_WEIGHTS = {
+        'conjunction': 1.0, 'opposition': 0.8, 'trine': 1.2,
+        'square': 0.9, 'sextile': 1.1, 'quincunx': 0.6
+    }
+    PLANET_WEIGHTS = {
+        'Sun': 1.5, 'Moon': 1.5, 'Ascendant': 1.2, 'Venus': 1.4, 'Mars': 1.3,
+        'Mercury': 1.1, 'Jupiter': 1.0, 'Saturn': 0.8, 'Uranus': 0.7,
+        'Neptune': 0.7, 'Pluto': 0.7
+    }
 
-    score = (
-        (_get_element_score(p1.sun_sign, p2.sun_sign) * 0.30) +
-        (_get_element_score(p1.moon_sign, p2.moon_sign) * 0.25) +
-        (_get_element_score(p1.rising_sign, p2.rising_sign) * 0.20) +
-        (_get_modality_score(p1.sun_sign, p2.sun_sign) * 0.10) +
-        (_get_modality_score(p1.moon_sign, p2.moon_sign) * 0.08) +
-        (_get_modality_score(p1.rising_sign, p2.rising_sign) * 0.07)
-    )
-    return int(max(10, min(99, score)))
+    total_score = 0
+    positive_points = 0
+    negative_points = 0
+    
+    # Alt skorlar için sayaçlar
+    love_harmony = 0       # Venüs, Mars, Ay arasındaki uyumlu açılar
+    communication = 0      # Merkür, Güneş, Jüpiter arasındaki uyumlu açılar
+    challenges = 0         # Satürn, Mars, Pluto arasındaki zorlayıcı açılar
+
+    for aspect in aspects_data:
+        planet1 = aspect.get('planet1', {}).get('name')
+        planet2 = aspect.get('planet2', {}).get('name')
+        aspect_name = aspect.get('aspect', {}).get('name')
+        orb = aspect.get('orb_decimal')
+        is_positive = aspect.get('aspect', {}).get('type') == 'soft'
+        
+        if not all([planet1, planet2, aspect_name, orb is not None]):
+            continue
+
+        # Temel puanı hesapla (açı ne kadar darsa o kadar güçlü)
+        base_score = (10 - abs(orb)) * 10
+        
+        # Gezegen ve açı ağırlıklarını uygula
+        weighted_score = base_score * \
+                         PLANET_WEIGHTS.get(planet1, 0.5) * \
+                         PLANET_WEIGHTS.get(planet2, 0.5) * \
+                         ASPECT_WEIGHTS.get(aspect_name, 0.5)
+
+        if is_positive:
+            total_score += weighted_score
+            positive_points += 1
+            # Alt skorları doldur
+            if planet1 in ['Venus', 'Mars', 'Moon'] and planet2 in ['Venus', 'Mars', 'Moon', 'Sun']:
+                love_harmony += weighted_score
+            if planet1 in ['Mercury', 'Jupiter', 'Sun'] and planet2 in ['Mercury', 'Jupiter', 'Sun']:
+                communication += weighted_score
+        else:
+            total_score -= weighted_score
+            negative_points += 1
+            if planet1 in ['Saturn', 'Mars', 'Pluto'] and planet2 in ['Saturn', 'Mars', 'Pluto', 'Sun', 'Moon']:
+                challenges += weighted_score
+
+    # Toplam skoru 0-100 aralığına normalize et
+    # Bu formül, deneme yanılma ile daha iyi hale getirilebilir
+    if positive_points + negative_points == 0:
+        return 50, {}
+        
+    normalized_score = 50 + (total_score / ((positive_points + negative_points) * 100))
+    final_score = int(max(10, min(99, normalized_score)))
+    
+    # Alt skorları 0-100 aralığına normalize et
+    # Bu basit bir normalizasyon, daha karmaşık hale getirilebilir
+    def normalize_sub_score(score, total):
+        if total == 0: return 0
+        return int(min(99, (score / total) * 100 * 5))
+
+    total_positive_score = love_harmony + communication
+    
+    breakdown = {
+        "ask_uyumu": normalize_sub_score(love_harmony, total_positive_score),
+        "iletisim_uyumu": normalize_sub_score(communication, total_positive_score),
+        "zorluk_potansiyeli": normalize_sub_score(challenges, challenges if challenges > 0 else 1),
+    }
+
+    return final_score, breakdown

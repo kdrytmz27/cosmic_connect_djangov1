@@ -1,11 +1,18 @@
-# interactions/api/urls.py
-
 from django.urls import path
-from .views import DiscoverView, DailyMatchView, LikeView
+from .views import (
+    DiscoverProfilesView,
+    LikeProfileView,
+    PassProfileView,
+    ActivityDataView,
+    DailyMatchView,
+)
 
 urlpatterns = [
-    path('discover/', DiscoverView.as_view(), name='discover'),
+    path('discover/', DiscoverProfilesView.as_view(), name='discover-profiles'),
+    path('like/<int:user_id>/', LikeProfileView.as_view(), name='like-profile'),
+    path('pass/<int:user_id>/', PassProfileView.as_view(), name='pass-profile'),
+    
+    # GÜNCELLENDİ: Yeni endpointleri ekledik
+    path('activity/', ActivityDataView.as_view(), name='activity-data'),
     path('daily-match/', DailyMatchView.as_view(), name='daily-match'),
-    path('like/<int:user_id>/', LikeView.as_view(), name='like'),
-    # Block, SuperLike gibi diğer endpoint'ler buraya eklenebilir.
 ]

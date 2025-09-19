@@ -16,13 +16,37 @@ class DeviceSerializer(serializers.ModelSerializer):
 
 class ProfileSerializer(serializers.ModelSerializer):
     age = serializers.IntegerField(read_only=True)
-    
+    sun_sign_display = serializers.CharField(source='get_sun_sign_display', read_only=True)
+    moon_sign_display = serializers.CharField(source='get_moon_sign_display', read_only=True)
+    rising_sign_display = serializers.CharField(source='get_rising_sign_display', read_only=True)
+
+    # --- NİHAİ DÜZELTME: EKSİK KİŞİSEL GEZEGENLER EKLENDİ ---
+    # Django, "choices" olan her alan için otomatik olarak "get_FIELD_display" metodu oluşturur.
+    # Biz de bu metodları kullanarak Türkçe isimleri API'ye ekliyoruz.
+    mercury_sign_display = serializers.CharField(source='get_mercury_sign_display', read_only=True)
+    venus_sign_display = serializers.CharField(source='get_venus_sign_display', read_only=True)
+    mars_sign_display = serializers.CharField(source='get_mars_sign_display', read_only=True)
+
     class Meta:
         model = Profile
-        exclude = ['user']
+        fields = [
+            'birth_date', 'birth_time', 'birth_city', 'gender', 'avatar',
+            'latitude', 'longitude', 'age', 
+            
+            'is_birth_chart_calculated', 
+            'sun_sign', 'moon_sign', 'rising_sign', 'mercury_sign', 'venus_sign', 'mars_sign', 
+            'natal_chart_png_base64', 'insights_data',
+            
+            # Türkçe isimler için eklenen tüm alanlar
+            'sun_sign_display', 'moon_sign_display', 'rising_sign_display',
+            'mercury_sign_display', 'venus_sign_display', 'mars_sign_display' # EKSİK OLANLAR EKLENDİ
+        ]
+        
         read_only_fields = [
-            'age', 'sun_sign', 'moon_sign', 'rising_sign', 'mercury_sign', 
-            'venus_sign', 'mars_sign', 'natal_chart_png_base64', 'insights_data'
+            'latitude', 'longitude', 'age', 'is_birth_chart_calculated',
+            'sun_sign', 'moon_sign', 'rising_sign', 'mercury_sign', 'venus_sign', 'mars_sign', 
+            'natal_chart_png_base64', 'insights_data', 'sun_sign_display', 'moon_sign_display', 
+            'rising_sign_display', 'mercury_sign_display', 'venus_sign_display', 'mars_sign_display' # EKSİK OLANLAR EKLENDİ
         ]
 
 class UserSerializer(serializers.ModelSerializer):
@@ -45,26 +69,22 @@ class UserSerializer(serializers.ModelSerializer):
             setattr(profile, attr, value)
             update_fields.append(attr)
 
-        # --- YENİ AKILLI BÖLÜM ---
-        # Eğer doğum şehri güncellendiyse, koordinatları otomatik olarak bul ve ekle.
         if 'birth_city' in update_fields:
             try:
-                geolocator = Nominatim(user_agent="cosmic_connect_app")
-                location = geolocator.geocode(profile.birth_city, timeout=10)
+                geolocator = Nominatim(user_agent="cosmic_connect_app", timeout=10)
+                location = geolocator.geocode(profile.birth_city)
                 if location:
                     profile.latitude = location.latitude
                     profile.longitude = location.longitude
-                    # Bu alanların da güncellendiğini listeye ekle
                     if 'latitude' not in update_fields: update_fields.append('latitude')
                     if 'longitude' not in update_fields: update_fields.append('longitude')
             except (GeocoderTimedOut, GeocoderUnavailable):
-                # Eğer geocoding servisi çalışmazsa işlemi durdurma, sadece logla.
-                # Daha sonra tekrar denenebilir.
                 print(f"Uyarı: {profile.birth_city} için koordinat alınamadı.")
         
         if update_fields:
             profile.save(update_fields=update_fields)
 
+        instance.refresh_from_db()
         return instance
 
 class RegisterSerializer(serializers.ModelSerializer):

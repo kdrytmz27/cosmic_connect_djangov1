@@ -10,8 +10,6 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils.translation import gettext_lazy as _
 
-from astrology.tasks import process_astrological_data_for_profile
-
 SIGN_CHOICES = [
     ('Aries', _('Koç')), ('Taurus', _('Boğa')), ('Gemini', _('İkizler')),
     ('Cancer', _('Yengeç')), ('Leo', _('Aslan')), ('Virgo', _('Başak')),
@@ -53,6 +51,8 @@ class Profile(models.Model):
     natal_chart_png_base64 = models.TextField(_("Doğum Haritası (Base64)"), blank=True)
     insights_data = models.JSONField(_("Astrolojik Analiz Verileri"), null=True, blank=True)
 
+    is_birth_chart_calculated = models.BooleanField(_("Harita Hesaplandı mı?"), default=False)
+
     class Meta:
         verbose_name = _("Profil")
         verbose_name_plural = _("Profiller")
@@ -86,13 +86,25 @@ def create_user_profile(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=Profile)
 def trigger_astrology_processing(sender, instance, created, update_fields, **kwargs):
-    if not all([instance.birth_date, instance.birth_time, instance.birth_city, instance.latitude, instance.longitude]):
+    from astrology.tasks import process_astrological_data_for_profile
+
+    # --- KRİTİK DEĞİŞİKLİK: DÖNGÜYÜ KIRAN KONTROL ---
+    # Eğer bu save işlemi, 'is_birth_chart_calculated' alanını güncellemek için yapıldıysa
+    # ve SADECE bu alan güncelleniyorsa, sinyalin tekrar tetiklenmesini engelle.
+    # Bu, interactions.tasks içindeki save() işleminin döngüye yol açmasını önler.
+    if update_fields and 'is_birth_chart_calculated' in update_fields and len(update_fields) == 1:
         return
+
+    birth_fields = ['birth_date', 'birth_time', 'birth_city', 'latitude', 'longitude']
     
-    if not created and update_fields and not any(field in update_fields for field in ['birth_date', 'birth_time', 'birth_city']):
-        return
-    
-    process_astrological_data_for_profile.delay(profile_id=instance.id)
+    # Eğer doğum bilgileri tam ve harita henüz hesaplanmamışsa görevi tetikle.
+    if all([instance.birth_date, instance.birth_time, instance.birth_city, instance.latitude, instance.longitude]) and not instance.is_birth_chart_calculated:
+        # Eğer bu bir güncelleme ise (oluşturma değil) ve doğum alanları değişmediyse, tetikleme.
+        # Bu, astrology.tasks içindeki save() işleminin döngüye yol açmasını önler.
+        if not created and update_fields and not any(field in update_fields for field in birth_fields):
+            return
+        
+        process_astrological_data_for_profile.delay(profile_id=instance.id)
 
 class Device(models.Model):
     class DeviceType(models.TextChoices):
