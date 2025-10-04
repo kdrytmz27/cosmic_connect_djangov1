@@ -119,4 +119,4 @@ CELERY_TIMEZONE = TIME_ZONE
 FIREBASE_SERVICE_ACCOUNT_KEY_PATH = BASE_DIR / 'firebase-service-account.json'
 
 COSMIC_API_KEY = config('COSMIC_API_KEY', default='')
-COSMIC_API_BASE_URL = config('COSMIC_API_BASE_URL', default="https://cosmicapiv1-1.onrender.com/v1")
+COSMIC_API_BASE_URL = config('COSMIC_API_BASE_URL', default="https://cosmicapiv1-1.vercel.app/v1")

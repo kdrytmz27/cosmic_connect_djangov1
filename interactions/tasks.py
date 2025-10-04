@@ -1,6 +1,5 @@
-# Lütfen bu kodu kopyalayıp interactions/tasks.py dosyasının içine yapıştırın.
-
 import logging
+import time
 from celery import shared_task
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -11,6 +10,7 @@ from users.models import Profile, trigger_astrology_processing
 from .models import Compatibility, DailyMatch, Block
 from .logic import calculate_synastry_score 
 from astrology.client import cosmic_api_client
+from requests.exceptions import RequestException
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -63,9 +63,12 @@ def calculate_compatibilities_for_user(user_id: int):
                     breakdown=breakdown
                 )
             )
+        except RequestException:
+            logger.warning(f"'{main_user.username}' ve '{other_user.username}' için uyumluluk hesaplanamadı. Harici API hatası. Sonraki çifte geçiliyor.")
         except Exception as e:
-            logger.error(f"{p1.user.username} ve {p2.user.username} için sinastri hesaplanırken hata: {e}")
-            continue
+            logger.error(f"'{main_user.username}' ve '{other_user.username}' için sinastri hesaplanırken beklenmedik bir iç hata oluştu: {e}")
+        
+        time.sleep(15)
 
     if compatibilities_to_update_or_create:
         with transaction.atomic():
@@ -74,11 +77,11 @@ def calculate_compatibilities_for_user(user_id: int):
             
         logger.info(f"'{main_user.username}' için {len(compatibilities_to_update_or_create)} kullanıcı ile sinastri uyumluluk skorları kaydedildi.")
         
-        main_user.profile.is_birth_chart_calculated = True
-        post_save.disconnect(trigger_astrology_processing, sender=Profile)
-        main_user.profile.save(update_fields=['is_birth_chart_calculated'])
-        post_save.connect(trigger_astrology_processing, sender=Profile)
-        logger.info(f"'{main_user.username}' için is_birth_chart_calculated durumu True olarak işaretlendi (sinyal tetiklenmedi).")
+    main_user.profile.is_birth_chart_calculated = True
+    post_save.disconnect(trigger_astrology_processing, sender=Profile)
+    main_user.profile.save(update_fields=['is_birth_chart_calculated'])
+    post_save.connect(trigger_astrology_processing, sender=Profile)
+    logger.info(f"'{main_user.username}' için is_birth_chart_calculated durumu True olarak işaretlendi (sinyal tetiklenmedi).")
 
 @shared_task
 def generate_daily_matches_task():
